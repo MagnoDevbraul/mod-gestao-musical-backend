@@ -1,9 +1,13 @@
 package br.com.mod.gestaomusical.service;
 
+import br.com.mod.gestaomusical.dto.DashboardAlteracaoPendenteResponseDTO;
 import br.com.mod.gestaomusical.dto.DashboardAlunosPorComumResponseDTO;
 import br.com.mod.gestaomusical.dto.DashboardAtividadeResponseDTO;
+import br.com.mod.gestaomusical.dto.DashboardNotificacaoResponseDTO;
 import br.com.mod.gestaomusical.dto.DashboardResponseDTO;
 import br.com.mod.gestaomusical.entity.Historico;
+import br.com.mod.gestaomusical.entity.Notificacao;
+import br.com.mod.gestaomusical.entity.SolicitacaoAlteracaoAluno;
 import br.com.mod.gestaomusical.entity.StatusSolicitacaoAlteracaoAluno;
 import br.com.mod.gestaomusical.repository.AlunoRepository;
 import br.com.mod.gestaomusical.repository.HistoricoRepository;
@@ -110,6 +114,33 @@ public class DashboardService {
                 alunosPorComum
         );
 
+        List<DashboardNotificacaoResponseDTO>
+                notificacoesRecentes =
+                notificacaoRepository
+                        .findTop5ByOrderByDataHoraDesc()
+                        .stream()
+                        .map(this::converterNotificacao)
+                        .toList();
+
+        dto.setNotificacoesRecentes(
+                notificacoesRecentes
+        );
+
+        List<DashboardAlteracaoPendenteResponseDTO>
+                alteracoesRestritasPendentes =
+                solicitacaoAlteracaoAlunoRepository
+                        .findByStatusOrderByCriadoEmDesc(
+                                StatusSolicitacaoAlteracaoAluno.PENDENTE
+                        )
+                        .stream()
+                        .limit(5)
+                        .map(this::converterAlteracaoPendente)
+                        .toList();
+
+        dto.setAlteracoesRestritasPendentes(
+                alteracoesRestritasPendentes
+        );
+
         return dto;
     }
 
@@ -137,5 +168,107 @@ public class DashboardService {
         );
 
         return dto;
+    }
+
+    private DashboardNotificacaoResponseDTO
+    converterNotificacao(
+            Notificacao notificacao) {
+
+        DashboardNotificacaoResponseDTO dto =
+                new DashboardNotificacaoResponseDTO();
+
+        dto.setId(
+                notificacao.getId()
+        );
+
+        dto.setTipoEvento(
+                notificacao.getTipoEvento()
+        );
+
+        dto.setTitulo(
+                notificacao.getTitulo()
+        );
+
+        dto.setMensagem(
+                notificacao.getMensagem()
+        );
+
+        dto.setDataHora(
+                notificacao.getDataHora()
+        );
+
+        dto.setLida(
+                notificacao.getLida()
+        );
+
+        return dto;
+    }
+
+    private DashboardAlteracaoPendenteResponseDTO
+    converterAlteracaoPendente(
+            SolicitacaoAlteracaoAluno solicitacao) {
+
+        DashboardAlteracaoPendenteResponseDTO dto =
+                new DashboardAlteracaoPendenteResponseDTO();
+
+        dto.setId(
+                solicitacao.getId()
+        );
+
+        dto.setAluno(
+                solicitacao
+                        .getAluno()
+                        .getNome()
+        );
+
+        dto.setCampo(
+                identificarCampoAlterado(
+                        solicitacao
+                )
+        );
+
+        dto.setSolicitante(
+                solicitacao
+                        .getSolicitante()
+                        .getNome()
+        );
+
+        dto.setStatus(
+                solicitacao
+                        .getStatus()
+                        .name()
+        );
+
+        dto.setCriadoEm(
+                solicitacao.getCriadoEm()
+        );
+
+        return dto;
+    }
+
+    private String identificarCampoAlterado(
+            SolicitacaoAlteracaoAluno solicitacao) {
+
+        if (solicitacao.getComumId() != null) {
+            return "Comum";
+        }
+
+        if (solicitacao.getNivelId() != null) {
+            return "Nível";
+        }
+
+        if (solicitacao.getCargoMinisterioId() != null) {
+            return "Cargo/Ministério";
+        }
+
+        if (solicitacao.getDataBatismo() != null) {
+            return "Data de Batismo";
+        }
+
+        if (solicitacao.getDataInicioGem() != null) {
+            return "Data de Início GEM";
+        }
+
+        return "Alteração restrita";
     }
 }

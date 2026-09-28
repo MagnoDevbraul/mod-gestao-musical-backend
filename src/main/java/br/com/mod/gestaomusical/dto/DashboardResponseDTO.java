@@ -16,6 +16,12 @@ public class DashboardResponseDTO {
     private List<DashboardAlunosPorComumResponseDTO>
             alunosPorComum;
 
+    private List<DashboardNotificacaoResponseDTO>
+            notificacoesRecentes;
+
+    private List<DashboardAlteracaoPendenteResponseDTO>
+            alteracoesRestritasPendentes;
+
     public DashboardResponseDTO() {
     }
 
@@ -61,29 +67,48 @@ public class DashboardResponseDTO {
 
     public List<DashboardAtividadeResponseDTO>
     getAtividadesRecentes() {
-
         return atividadesRecentes;
     }
 
     public void setAtividadesRecentes(
-            List<DashboardAtividadeResponseDTO>
-                    atividadesRecentes) {
+            List<DashboardAtividadeResponseDTO> atividadesRecentes) {
 
-        this.atividadesRecentes =
-                atividadesRecentes;
+        this.atividadesRecentes = atividadesRecentes;
     }
 
     public List<DashboardAlunosPorComumResponseDTO>
     getAlunosPorComum() {
-
         return alunosPorComum;
     }
 
     public void setAlunosPorComum(
-            List<DashboardAlunosPorComumResponseDTO>
-                    alunosPorComum) {
+            List<DashboardAlunosPorComumResponseDTO> alunosPorComum) {
 
-        this.alunosPorComum =
-                alunosPorComum;
+        this.alunosPorComum = alunosPorComum;
+    }
+
+    public List<DashboardNotificacaoResponseDTO>
+    getNotificacoesRecentes() {
+        return notificacoesRecentes;
+    }
+
+    public void setNotificacoesRecentes(
+            List<DashboardNotificacaoResponseDTO> notificacoesRecentes) {
+
+        this.notificacoesRecentes = notificacoesRecentes;
+    }
+
+    public List<DashboardAlteracaoPendenteResponseDTO>
+    getAlteracoesRestritasPendentes() {
+
+        return alteracoesRestritasPendentes;
+    }
+
+    public void setAlteracoesRestritasPendentes(
+            List<DashboardAlteracaoPendenteResponseDTO>
+                    alteracoesRestritasPendentes) {
+
+        this.alteracoesRestritasPendentes =
+                alteracoesRestritasPendentes;
     }
 }
