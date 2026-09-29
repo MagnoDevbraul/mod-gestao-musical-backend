@@ -7,6 +7,8 @@ import br.com.mod.gestaomusical.entity.*;
 import br.com.mod.gestaomusical.repository.*;
 import br.com.mod.gestaomusical.security.UsuarioAutenticadoService;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -19,6 +21,9 @@ import java.util.Optional;
 
 @Service
 public class SolicitacaoAlteracaoAlunoService {
+
+    private static final String PERMISSAO_APROVAR =
+            "ALTERACAO_RESTRITA_APROVAR";
 
     private final SolicitacaoAlteracaoAlunoRepository solicitacaoRepository;
     private final AlunoRepository alunoRepository;
@@ -84,9 +89,14 @@ public class SolicitacaoAlteracaoAlunoService {
     }
 
     /*
-     * Cria uma solicitação de alteração restrita.
+     * Regra:
      *
-     * O aluno NÃO é alterado neste momento.
+     * SECRETARIA:
+     * aplica a alteração restrita diretamente.
+     * Não cria solicitação pendente.
+     *
+     * DEMAIS USUÁRIOS:
+     * cria solicitação PENDENTE para decisão da Secretaria.
      */
     @Transactional
     public SolicitacaoAlteracaoAlunoResponseDTO solicitar(
@@ -132,6 +142,34 @@ public class SolicitacaoAlteracaoAlunoService {
             );
         }
 
+        validarReferencias(dto);
+
+        Usuario usuario =
+                usuarioAutenticadoService
+                        .obterUsuarioAutenticado();
+
+        /*
+         * SECRETARIA:
+         *
+         * ALTERACAO_RESTRITA_APROVAR deve pertencer
+         * exclusivamente ao perfil SECRETARIA.
+         *
+         * Se o usuário possui essa permissão, a alteração
+         * é aplicada diretamente e NÃO cria pendência.
+         */
+        if (possuiPermissao(PERMISSAO_APROVAR)) {
+
+            return aplicarAlteracaoDiretaSecretaria(
+                    aluno,
+                    usuario,
+                    dto
+            );
+        }
+
+        /*
+         * Para os demais usuários não permitimos criar
+         * uma segunda solicitação pendente para o mesmo aluno.
+         */
         if (solicitacaoRepository
                 .existsByAluno_IdAndStatus(
                         alunoId,
@@ -144,17 +182,11 @@ public class SolicitacaoAlteracaoAlunoService {
             );
         }
 
-        validarReferencias(dto);
-
-        Usuario solicitante =
-                usuarioAutenticadoService
-                        .obterUsuarioAutenticado();
-
         SolicitacaoAlteracaoAluno solicitacao =
                 new SolicitacaoAlteracaoAluno();
 
         solicitacao.setAluno(aluno);
-        solicitacao.setSolicitante(solicitante);
+        solicitacao.setSolicitante(usuario);
 
         solicitacao.setStatus(
                 StatusSolicitacaoAlteracaoAluno.PENDENTE
@@ -194,13 +226,13 @@ public class SolicitacaoAlteracaoAlunoService {
                 criarSnapshotProposto(salva);
 
         /*
-         * Histórico.
+         * Histórico da solicitação.
          */
         Historico historico =
                 new Historico();
 
         historico.setAluno(aluno);
-        historico.setUsuario(solicitante);
+        historico.setUsuario(usuario);
 
         historico.setTipoEvento(
                 "SOLICITACAO_ALTERACAO_RESTRITA_ALUNO"
@@ -226,7 +258,7 @@ public class SolicitacaoAlteracaoAlunoService {
         Notificacao notificacao =
                 new Notificacao();
 
-        notificacao.setUsuario(solicitante);
+        notificacao.setUsuario(usuario);
         notificacao.setAluno(aluno);
 
         notificacao.setTipoEvento(
@@ -264,15 +296,185 @@ public class SolicitacaoAlteracaoAlunoService {
     }
 
     /*
+     * Alteração direta realizada pela Secretaria.
+     *
+     * Não gera solicitação pendente.
+     * A alteração é aplicada imediatamente.
+     *
+     * Mesmo assim:
+     * - registra Histórico;
+     * - registra Notificação;
+     * - registra Auditoria.
+     */
+    private SolicitacaoAlteracaoAlunoResponseDTO aplicarAlteracaoDiretaSecretaria(
+            Aluno aluno,
+            Usuario secretaria,
+            SolicitacaoAlteracaoAlunoRequestDTO dto) {
+
+        Map<String, Object> dadosAnteriores =
+                criarSnapshotRestrito(aluno);
+
+        aplicarAlteracoesDiretas(
+                aluno,
+                dto
+        );
+
+        Aluno alunoSalvo =
+                alunoRepository.save(aluno);
+
+        Map<String, Object> dadosNovos =
+                criarSnapshotRestrito(alunoSalvo);
+
+        /*
+         * Histórico.
+         */
+        Historico historico =
+                new Historico();
+
+        historico.setAluno(alunoSalvo);
+        historico.setUsuario(secretaria);
+
+        historico.setTipoEvento(
+                "ALTERACAO_RESTRITA_ALUNO_DIRETA_SECRETARIA"
+        );
+
+        historico.setDescricao(
+                "Alteração restrita realizada diretamente pela Secretaria no MOD."
+        );
+
+        historico.setValorAnterior(
+                dadosAnteriores.toString()
+        );
+
+        historico.setValorNovo(
+                dadosNovos.toString()
+        );
+
+        historicoRepository.save(historico);
+
+        /*
+         * Notificação.
+         */
+        Notificacao notificacao =
+                new Notificacao();
+
+        notificacao.setUsuario(secretaria);
+        notificacao.setAluno(alunoSalvo);
+
+        notificacao.setTipoEvento(
+                "ALTERACAO_RESTRITA_ALUNO_DIRETA_SECRETARIA"
+        );
+
+        notificacao.setTitulo(
+                "Alteração restrita realizada"
+        );
+
+        notificacao.setMensagem(
+                "A Secretaria realizou uma alteração restrita diretamente no aluno "
+                        + alunoSalvo.getNome()
+                        + "."
+        );
+
+        notificacao.setLida(false);
+        notificacao.setDataLeitura(null);
+
+        notificacaoRepository.save(notificacao);
+
+        /*
+         * Auditoria.
+         */
+        auditoriaService.registrar(
+                "ALTERACAO_RESTRITA_ALUNO_DIRETA_SECRETARIA",
+                "aluno",
+                alunoSalvo.getId(),
+                "Alteração restrita realizada diretamente pela Secretaria no MOD. Motivo: "
+                        + dto.getMotivo().trim(),
+                dadosAnteriores,
+                dadosNovos
+        );
+
+        /*
+         * Não existe solicitação persistida neste fluxo.
+         *
+         * O DTO apenas informa ao cliente que a alteração
+         * foi aplicada diretamente.
+         */
+        SolicitacaoAlteracaoAlunoResponseDTO resposta =
+                new SolicitacaoAlteracaoAlunoResponseDTO();
+
+        resposta.setId(null);
+
+        resposta.setAlunoId(
+                alunoSalvo.getId()
+        );
+
+        resposta.setAlunoNome(
+                alunoSalvo.getNome()
+        );
+
+        resposta.setSolicitanteId(
+                secretaria.getId()
+        );
+
+        resposta.setSolicitanteNome(
+                secretaria.getNome()
+        );
+
+        resposta.setAprovadorId(null);
+        resposta.setAprovadorNome(null);
+
+        resposta.setStatus(
+                "APLICADA_DIRETAMENTE"
+        );
+
+        resposta.setComumId(
+                dto.getComumId()
+        );
+
+        resposta.setNivelId(
+                dto.getNivelId()
+        );
+
+        resposta.setCargoMinisterioId(
+                dto.getCargoMinisterioId()
+        );
+
+        resposta.setDataBatismo(
+                dto.getDataBatismo()
+        );
+
+        resposta.setDataInicioGem(
+                dto.getDataInicioGem()
+        );
+
+        resposta.setMotivo(
+                dto.getMotivo().trim()
+        );
+
+        resposta.setObservacaoDecisao(null);
+
+        resposta.setCriadoEm(
+                LocalDateTime.now()
+        );
+
+        resposta.setDecididoEm(
+                LocalDateTime.now()
+        );
+
+        return resposta;
+    }
+
+    /*
      * Aprova uma solicitação.
      *
-     * Somente aqui os valores restritos são efetivamente
-     * aplicados ao aluno.
+     * Somente a Secretaria pode executar esta operação.
      */
     @Transactional
     public SolicitacaoAlteracaoAlunoResponseDTO aprovar(
             Long solicitacaoId,
             DecisaoAlteracaoAlunoRequestDTO dto) {
+
+        validarPermissaoDecisao();
 
         SolicitacaoAlteracaoAluno solicitacao =
                 buscarSolicitacaoPendente(
@@ -403,12 +605,14 @@ public class SolicitacaoAlteracaoAlunoService {
     /*
      * Rejeita uma solicitação.
      *
-     * Nenhum dado do aluno é alterado.
+     * Somente a Secretaria pode executar esta operação.
      */
     @Transactional
     public SolicitacaoAlteracaoAlunoResponseDTO rejeitar(
             Long solicitacaoId,
             DecisaoAlteracaoAlunoRequestDTO dto) {
+
+        validarPermissaoDecisao();
 
         SolicitacaoAlteracaoAluno solicitacao =
                 buscarSolicitacaoPendente(
@@ -542,6 +746,48 @@ public class SolicitacaoAlteracaoAlunoService {
         return converterParaDTO(salva);
     }
 
+    /*
+     * Validação adicional de segurança.
+     *
+     * Mesmo que o Controller possua @PreAuthorize,
+     * o Service também garante que apenas quem possui
+     * ALTERACAO_RESTRITA_APROVAR possa decidir.
+     */
+    private void validarPermissaoDecisao() {
+
+        if (!possuiPermissao(PERMISSAO_APROVAR)) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Somente a Secretaria pode aprovar ou rejeitar alterações restritas"
+            );
+        }
+    }
+
+    private boolean possuiPermissao(
+            String permissao) {
+
+        Authentication authentication =
+                SecurityContextHolder
+                        .getContext()
+                        .getAuthentication();
+
+        if (authentication == null
+                || !authentication.isAuthenticated()) {
+
+            return false;
+        }
+
+        return authentication
+                .getAuthorities()
+                .stream()
+                .anyMatch(authority ->
+                        permissao.equals(
+                                authority.getAuthority()
+                        )
+                );
+    }
+
     private SolicitacaoAlteracaoAluno buscarSolicitacaoPendente(
             Long solicitacaoId) {
 
@@ -616,6 +862,10 @@ public class SolicitacaoAlteracaoAlunoService {
         }
     }
 
+    /*
+     * Aplicação de alteração oriunda de solicitação
+     * aprovada pela Secretaria.
+     */
     private void aplicarAlteracoes(
             Aluno aluno,
             SolicitacaoAlteracaoAluno solicitacao) {
@@ -681,6 +931,85 @@ public class SolicitacaoAlteracaoAlunoService {
                     solicitacao.getDataInicioGem()
             );
         }
+
+        aluno.setAtualizadoEm(
+                LocalDateTime.now()
+        );
+    }
+
+    /*
+     * Aplicação direta quando a Secretaria é
+     * o próprio autor da alteração.
+     */
+    private void aplicarAlteracoesDiretas(
+            Aluno aluno,
+            SolicitacaoAlteracaoAlunoRequestDTO dto) {
+
+        if (dto.getComumId() != null) {
+
+            aluno.setComum(
+                    comumRepository
+                            .findById(
+                                    dto.getComumId()
+                            )
+                            .orElseThrow(() ->
+                                    new ResponseStatusException(
+                                            HttpStatus.NOT_FOUND,
+                                            "Comum não encontrada"
+                                    )
+                            )
+            );
+        }
+
+        if (dto.getNivelId() != null) {
+
+            aluno.setNivel(
+                    nivelRepository
+                            .findById(
+                                    dto.getNivelId()
+                            )
+                            .orElseThrow(() ->
+                                    new ResponseStatusException(
+                                            HttpStatus.NOT_FOUND,
+                                            "Nível não encontrado"
+                                    )
+                            )
+            );
+        }
+
+        if (dto.getCargoMinisterioId() != null) {
+
+            aluno.setCargoMinisterio(
+                    cargoMinisterioRepository
+                            .findById(
+                                    dto.getCargoMinisterioId()
+                            )
+                            .orElseThrow(() ->
+                                    new ResponseStatusException(
+                                            HttpStatus.NOT_FOUND,
+                                            "Cargo ministerial não encontrado"
+                                    )
+                            )
+            );
+        }
+
+        if (dto.getDataBatismo() != null) {
+
+            aluno.setDataBatismo(
+                    dto.getDataBatismo()
+            );
+        }
+
+        if (dto.getDataInicioGem() != null) {
+
+            aluno.setDataInicioGem(
+                    dto.getDataInicioGem()
+            );
+        }
+
+        aluno.setAtualizadoEm(
+                LocalDateTime.now()
+        );
     }
 
     private String normalizarObservacao(
