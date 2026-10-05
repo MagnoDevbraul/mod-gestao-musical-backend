@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,6 +20,12 @@ import java.util.stream.Collectors;
 
 @Service
 public class PermissaoService {
+
+    private static final String PERFIL_SECRETARIA =
+            "SECRETARIA";
+
+    private static final String PERMISSAO_APROVAR_ALTERACAO_RESTRITA =
+            "ALTERACAO_RESTRITA_APROVAR";
 
     private final PermissaoRepository permissaoRepository;
     private final PerfilUsuarioRepository perfilUsuarioRepository;
@@ -81,8 +88,10 @@ public class PermissaoService {
             Long perfilId,
             AtualizarPermissoesPerfilRequestDTO dto) {
 
-        if (dto == null
-                || dto.getPermissaoIds() == null) {
+        if (
+                dto == null
+                        || dto.getPermissaoIds() == null
+        ) {
 
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
@@ -100,11 +109,63 @@ public class PermissaoService {
                                 )
                         );
 
+        Permissao permissaoCritica =
+                permissaoRepository
+                        .findByNome(
+                                PERMISSAO_APROVAR_ALTERACAO_RESTRITA
+                        )
+                        .orElseThrow(() ->
+                                new ResponseStatusException(
+                                        HttpStatus.INTERNAL_SERVER_ERROR,
+                                        "Permissão obrigatória "
+                                                + PERMISSAO_APROVAR_ALTERACAO_RESTRITA
+                                                + " não encontrada"
+                                )
+                        );
+
+        boolean perfilEhSecretaria =
+                perfil.getNome() != null
+                        && PERFIL_SECRETARIA
+                        .equalsIgnoreCase(
+                                perfil.getNome().trim()
+                        );
+
+        /*
+         * Verifica diretamente se o ID da
+         * permissão crítica foi enviado.
+         */
+        boolean solicitouPermissaoCritica =
+                dto.getPermissaoIds()
+                        .contains(
+                                permissaoCritica.getId()
+                        );
+
+        /*
+         * REGRA CRÍTICA:
+         *
+         * Somente SECRETARIA pode possuir
+         * ALTERACAO_RESTRITA_APROVAR.
+         */
+        if (
+                !perfilEhSecretaria
+                        && solicitouPermissaoCritica
+        ) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "A permissão "
+                            + PERMISSAO_APROVAR_ALTERACAO_RESTRITA
+                            + " é exclusiva do perfil SECRETARIA"
+            );
+        }
+
         Set<Long> anteriores =
                 perfil.getPermissoes()
                         .stream()
                         .map(Permissao::getId)
-                        .collect(Collectors.toSet());
+                        .collect(
+                                Collectors.toSet()
+                        );
 
         List<Permissao> encontradas =
                 permissaoRepository
@@ -112,8 +173,10 @@ public class PermissaoService {
                                 dto.getPermissaoIds()
                         );
 
-        if (encontradas.size()
-                != dto.getPermissaoIds().size()) {
+        if (
+                encontradas.size()
+                        != dto.getPermissaoIds().size()
+        ) {
 
             throw new ResponseStatusException(
                     HttpStatus.NOT_FOUND,
@@ -122,9 +185,39 @@ public class PermissaoService {
         }
 
         Set<Permissao> novas =
-                encontradas
-                        .stream()
-                        .collect(Collectors.toSet());
+                new HashSet<>(
+                        encontradas
+                );
+
+        /*
+         * SECRETARIA nunca pode perder
+         * ALTERACAO_RESTRITA_APROVAR.
+         */
+        if (perfilEhSecretaria) {
+
+            novas.add(
+                    permissaoCritica
+            );
+        }
+
+        /*
+         * Proteção adicional.
+         *
+         * Mesmo que algum dado inconsistente
+         * tenha chegado até aqui, nenhum perfil
+         * diferente da SECRETARIA manterá
+         * a permissão crítica.
+         */
+        if (!perfilEhSecretaria) {
+
+            novas.removeIf(
+                    permissao ->
+                            permissao.getId()
+                                    .equals(
+                                            permissaoCritica.getId()
+                                    )
+            );
+        }
 
         perfil.setPermissoes(
                 novas
@@ -147,9 +240,12 @@ public class PermissaoService {
 
         novo.put(
                 "permissaoIds",
-                novas.stream()
+                novas
+                        .stream()
                         .map(Permissao::getId)
-                        .collect(Collectors.toSet())
+                        .collect(
+                                Collectors.toSet()
+                        )
         );
 
         auditoriaService.registrar(
@@ -161,7 +257,8 @@ public class PermissaoService {
                 novo
         );
 
-        return novas.stream()
+        return novas
+                .stream()
                 .sorted(
                         (a, b) ->
                                 a.getNome()
