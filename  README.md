@@ -145,13 +145,15 @@ A relação ocorre principalmente pela aplicação de tecnologia na organizaçã
 
 A aplicação é organizada em módulos que se comunicam com uma API REST construída em Spring Boot.
 
-Principais capacidades já implementadas:
+Principais capacidades implementadas:
 
 - autenticação de usuários cadastrados no banco;
+- login e logout com sessão;
+- identificação do usuário autenticado;
+- controle de uma sessão ativa por usuário;
 - gestão de alunos;
-- consulta de Comuns;
-- consulta de níveis;
-- consulta de cargos ministeriais;
+- Comuns, níveis e cargos ministeriais;
+- instrumentos e tonalidades;
 - registro de MTS;
 - registro de MSA;
 - registro de Método;
@@ -160,15 +162,18 @@ Principais capacidades já implementadas:
 - histórico;
 - auditoria;
 - notificações;
-- arquivamento;
-- restauração;
+- arquivamento e restauração;
 - compartilhamento entre Comuns;
+- alterações restritas com fluxo PENDENTE/APROVADA/REJEITADA;
 - identificação de alunos sem movimentação;
 - alertas automáticos;
 - relatório mensal;
+- Dashboard da Secretaria;
+- usuários e permissões;
+- interface web em Angular + TypeScript;
 - documentação da API com Swagger/OpenAPI.
 
-Funcionalidades ainda em desenvolvimento são identificadas neste documento.
+Funcionalidades posteriores à entrega são identificadas neste documento.
 
 ---
 
@@ -232,15 +237,18 @@ Responsável pela autenticação, identificação do usuário autenticado e conf
 | Spring Web | API REST |
 | Spring Data JPA | Persistência |
 | Hibernate | ORM |
-| PostgreSQL | Banco de dados |
-| Spring Security | Autenticação e segurança |
+| PostgreSQL 17 | Banco de dados |
+| Spring Security | Autenticação, autorização e sessão |
 | BCrypt | Hash de senhas |
 | Springdoc OpenAPI | Documentação Swagger |
 | Maven | Gerenciamento de dependências |
+| Angular | Interface web |
+| TypeScript | Front-end |
+| Node.js / npm | Ambiente do front-end |
 | Postman | Testes da API |
 | Git | Controle de versão |
-| GitHub | Repositório remoto |
-| IntelliJ IDEA | Desenvolvimento |
+| GitHub | Repositórios remotos |
+| IntelliJ IDEA | Desenvolvimento back-end |
 | pgAdmin | Administração do PostgreSQL |
 
 ---
@@ -331,7 +339,7 @@ AUTORIZADOR = próprio usuário autenticado
 
 A validação deve considerar o vínculo de **setor**, não apenas a Comum individual.
 
-> **Status atual:** autenticação e autoria real já estão implementadas. As restrições completas por perfil e a validação de autorizador por setor ainda serão refinadas no código e validadas por testes.
+> **Status atual:** autenticação, autoria real, restrições por perfil, validação de autorizador por setor e bloqueio de autorizador com sessão ativa estão implementados e validados.
 
 ---
 
@@ -684,21 +692,23 @@ A implementação desse relatório depende da trilha de autoria real das operaç
 
 # 19. Dashboard
 
-> **Status: em desenvolvimento**
+> **Status: concluído**
 
-O Dashboard será responsável por apresentar indicadores resumidos da Secretaria Musical.
+O Dashboard da Secretaria foi implementado no front-end Angular e consome dados reais do back-end.
 
-Entre os indicadores previstos estão:
+Entre os indicadores apresentados estão:
 
+- total de alunos;
 - alunos ativos;
 - alunos arquivados;
-- alunos sem movimentação;
-- registros musicais recentes;
-- notificações;
-- atividades do período;
-- informações consolidadas dos relatórios.
+- alunos por Comum;
+- atividades recentes;
+- alterações pendentes;
+- notificações.
 
-Screenshots serão adicionados à documentação após a conclusão da interface.
+A contagem de alunos por Comum considera apenas alunos ativos, mantendo os indicadores coerentes após arquivamento e restauração.
+
+O Dashboard é restrito à Secretaria. Usuários sem permissão são direcionados para áreas compatíveis com seu perfil.
 
 ---
 
@@ -811,24 +821,33 @@ O usuário informado como autorizador está ativo no sistema.
 O lançamento deve ser realizado pelo próprio usuário.
 ```
 
-> **Status atual:** autenticação e autoria real já estão implementadas. A validação por perfil/setor e o controle confiável de sessão ativa ainda serão implementados e testados.
+> **Status atual:** autenticação, autoria real, validação por perfil/setor e controle de sessão ativa estão implementados e testados.
 
 ## 20.5 Controle de sessão e usuários online
 
-O sistema atualmente utiliza HTTP Basic para autenticação.
+O sistema utiliza autenticação por sessão com Spring Security.
 
-Como HTTP Basic autentica cada requisição e não mantém, por si só, uma sessão confiável de presença do usuário, será implementado um mecanismo adicional para identificar usuários com sessão ativa.
+Endpoints principais:
 
-Esse mecanismo deverá permitir:
+```text
+POST /auth/login
+POST /auth/logout
+GET  /auth/sessao
+```
 
-- login controlado;
-- logout;
-- registro de sessão ativa;
-- atualização de última atividade;
-- expiração por inatividade;
-- consulta segura para verificar se determinado usuário está utilizando o MOD naquele momento.
+A sessão utiliza cookie `JSESSIONID`.
 
-Esse controle será utilizado especialmente para impedir que Secretaria ou Encarregado Regional indiquem como autorizador um usuário que já esteja autenticado e ativo no sistema.
+O endpoint `/auth/sessao` informa o usuário autenticado, incluindo:
+
+- ID;
+- nome;
+- e-mail;
+- perfil;
+- status online.
+
+O controle de sessão ativa é utilizado também para impedir que Secretaria ou Encarregado Regional indiquem como autorizador um usuário que já esteja autenticado no MOD.
+
+O front-end exibe dinamicamente o nome e o perfil reais do usuário autenticado e restringe a exibição do Dashboard aos usuários autorizados.
 
 
 ---
@@ -912,7 +931,7 @@ A interface Swagger permite:
 - verificar parâmetros;
 - testar requisições;
 - visualizar respostas;
-- utilizar autenticação Basic.
+- testar endpoints protegidos após autenticação por sessão.
 
 O Swagger descreve a API.
 
@@ -970,7 +989,7 @@ spring.datasource.username
 spring.datasource.password
 ```
 
-## 23.5 Executar
+## 23.5 Executar o back-end
 
 Pela IDE:
 
@@ -978,13 +997,35 @@ Pela IDE:
 Executar a classe principal do Spring Boot
 ```
 
-Ou pelo Maven:
+Ou pelo Maven Wrapper:
 
-```bash
-mvn spring-boot:run
+```powershell
+.\mvnw spring-boot:run
 ```
 
-## 23.6 Abrir Swagger
+O back-end utiliza, por padrão:
+
+```text
+http://localhost:8080
+```
+
+## 23.6 Executar o front-end
+
+No projeto Angular:
+
+```powershell
+npm start
+```
+
+O front-end utiliza, por padrão:
+
+```text
+http://localhost:4200
+```
+
+Durante o desenvolvimento, o Angular utiliza proxy para comunicação com o back-end.
+
+## 23.7 Abrir Swagger
 
 Com a aplicação em execução:
 
@@ -1075,36 +1116,38 @@ Exemplo de inclusão no README:
 |---|---|
 | Estrutura Spring Boot | ✅ Concluído |
 | PostgreSQL + JPA/Hibernate | ✅ Concluído |
-| Gestão básica de alunos | ✅ Concluído |
+| Gestão de alunos | ✅ Concluído |
 | Comuns | ✅ Concluído |
 | Níveis | ✅ Concluído |
-| Cargos ministeriais | ✅ Estruturado |
+| Cargos ministeriais | ✅ Concluído |
+| Instrumentos e tonalidades | ✅ Concluído |
 | MTS | ✅ Concluído |
 | MSA | ✅ Concluído |
 | Método | ✅ Concluído |
 | Hinário | ✅ Concluído |
 | Escala | ✅ Concluído |
-| Histórico | ✅ Implementado |
-| Auditoria | ✅ Implementado |
-| Notificações | ✅ Implementado |
-| Arquivamento | ✅ Implementado |
-| Restauração | ✅ Implementado |
-| Compartilhamento | ✅ Implementado |
-| Aluno sem movimentação – 60 dias | ✅ Implementado |
-| Alertas de inatividade | ✅ Implementado |
-| Relatório mensal | ✅ Implementado |
-| Autenticação com usuários do banco | ✅ Implementado |
-| BCrypt | ✅ Implementado |
-| Autoria real das operações | ✅ Implementado |
-| Swagger / OpenAPI | ✅ Implementado |
+| Histórico | ✅ Concluído |
+| Auditoria | ✅ Concluído |
+| Notificações | ✅ Concluído |
+| Arquivamento | ✅ Concluído |
+| Restauração | ✅ Concluído |
+| Compartilhamento | ✅ Concluído |
+| Alterações restritas | ✅ Concluído |
+| Aluno sem movimentação – 60 dias | ✅ Concluído |
+| Alertas de inatividade | ✅ Concluído |
+| Relatório mensal | ✅ Concluído |
+| Dashboard | ✅ Concluído |
+| Front-end Angular | ✅ Concluído |
+| Autenticação com usuários do banco | ✅ Concluído |
+| Login / logout / sessão | ✅ Concluído |
+| Controle de sessão e usuários online | ✅ Concluído |
+| Bloqueio de autorizador com sessão ativa | ✅ Concluído |
+| Permissões por perfil e autorizador por setor | ✅ Concluído |
+| Swagger / OpenAPI | ✅ Concluído |
 | Scripts do banco | ✅ Versionados |
-| Permissões por perfil e autorizador por setor | ⏳ Em desenvolvimento |
-| Controle de sessão e usuários online | ⏳ Em desenvolvimento |
-| Bloqueio de autorizador com sessão ativa | ⏳ Em desenvolvimento |
-| Relatório semanal | ⏳ Em desenvolvimento |
-| Dashboard | ⏳ Em desenvolvimento |
-| Testes finais de segurança | ⏳ Pendente |
-| Documentação final | 🔄 Em evolução |
+| Testes manuais finais | ✅ Executados |
+| Relatório semanal | ⏳ Evolução posterior |
+| Fluxo de solicitação do Instrutor | ⏳ Evolução obrigatória pós-entrega |
 
 ---
 
@@ -1146,15 +1189,35 @@ Entre os cenários já verificados estão:
 
 No estado atual do projeto:
 
-- as regras completas de autorização por perfil ainda estão em desenvolvimento;
-- o controle de sessão ativa de usuários ainda será implementado;
-- o relatório semanal ainda será implementado;
-- o Dashboard ainda será implementado;
-- ainda serão executados testes finais de segurança;
+- o relatório semanal permanece como evolução posterior;
 - integrações com sistemas externos dependem de análise técnica e autorização institucional;
-- a interface visual final ainda não está concluída.
+- testes automatizados mais abrangentes ainda podem ser adicionados;
+- a implantação em ambiente de produção ainda não faz parte da versão acadêmica entregue.
 
-Essas limitações não impedem o funcionamento dos módulos já implementados da API.
+## 28.1 Evolução obrigatória pós-entrega — Instrutor
+
+A versão atual bloqueia o Instrutor quando ele tenta executar diretamente determinadas operações restritas.
+
+Após a entrega acadêmica, deverá ser implementada obrigatoriamente a seguinte regra:
+
+```text
+INSTRUTOR
+   |
+   v
+SOLICITA ALTERAÇÃO / EXCLUSÃO
+   |
+   v
+PENDENTE
+   |
+   v
+SECRETARIA ANALISA
+   |
+   +--> APROVA
+   |
+   +--> REJEITA
+```
+
+O Instrutor não deverá executar diretamente alteração restrita ou exclusão. A solicitação deverá gerar pendência, preservar histórico e produzir notificação/auditoria para análise da Secretaria.
 
 ---
 
@@ -1162,8 +1225,8 @@ Essas limitações não impedem o funcionamento dos módulos já implementados d
 
 Possíveis evoluções do projeto:
 
-- Dashboard web completo;
-- autenticação baseada em token;
+- fluxo obrigatório de solicitação do Instrutor para alteração/exclusão;
+- relatório semanal automatizado;
 - testes automatizados mais abrangentes;
 - integração autorizada com sistemas institucionais;
 - envio automatizado de relatórios;
@@ -1177,6 +1240,21 @@ Possíveis evoluções do projeto:
 - implantação em ambiente de produção.
 
 ---
+
+# Repositórios
+
+## Back-end
+
+```text
+https://github.com/MagnoDevbraul/mod-gestao-musical-backend
+```
+
+## Front-end
+
+```text
+https://github.com/MagnoDevbraul/mod-gestao-musical-frontend
+```
+
 
 # 30. Contexto acadêmico
 
@@ -1214,5 +1292,5 @@ O MOD busca demonstrar a aplicação prática de conhecimentos de:
 
 Este README é uma documentação viva.
 
-À medida que novas funcionalidades forem concluídas, especialmente **permissões por perfil**, **relatório semanal**, **Dashboard** e **testes finais de segurança**, este documento deverá ser atualizado para refletir o estado real do sistema.
+A versão atual reflete o estado funcional alcançado na entrega acadêmica. As evoluções posteriores permanecem separadas do escopo entregue, com destaque para o relatório semanal e para a regra obrigatória de solicitação do Instrutor para alterações/exclusões.
 
