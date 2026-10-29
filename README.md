@@ -243,7 +243,7 @@ O Diagrama Entidade-Relacionamento (DER), versão 05, documenta a estrutura do b
 
 O diagrama apresenta chaves primárias (PK), chaves estrangeiras (FK), cardinalidades e restrições de unicidade, permitindo compreender os relacionamentos entre as entidades.
 
-**[Consultar o DER V-05 completo](docs/DER-MOD-Gestao-Musical-V05.pdf)**
+**[Consultar o DER V-05 completo](docs/DER%20V-05.drawio.pdf)**
 
 ---
 
@@ -1113,7 +1113,15 @@ Exemplo de inclusão no README:
 
 ## DER
 
-> Adicionar imagem final do DER.
+## DER — Diagrama Entidade-Relacionamento
+
+O Diagrama Entidade-Relacionamento do MOD — Gestão Musical encontra-se documentado na **versão V-05**, distribuída em seis páginas.
+
+O documento apresenta a estrutura relacional do PostgreSQL, incluindo entidades, atributos, chaves primárias, chaves estrangeiras, cardinalidades e restrições de unicidade.
+
+**[Visualizar o DER V-05 completo (PDF)](docs/DER%20V-05.drawio.pdf)**
+
+O arquivo está disponível no diretório `docs/` do repositório.
 
 ## Caso de uso
 
