@@ -228,6 +228,25 @@ Responsável pela autenticação, identificação do usuário autenticado e conf
 
 ---
 
+## Modelagem do Banco de Dados — DER V-05
+
+O MOD — Módulo de Gestão Musical utiliza PostgreSQL como banco de dados relacional, com persistência implementada em Java, Spring Data JPA e Hibernate.
+
+O Diagrama Entidade-Relacionamento (DER), versão 05, documenta a estrutura do banco de dados em seis páginas:
+
+1. **Visão geral:** organização dos módulos do sistema.
+2. **Organização:** setores, congregações, alunos, níveis, cargos, instrumentos e tonalidades.
+3. **Usuários:** usuários, perfis, permissões e vínculos com setores.
+4. **Atividades musicais:** registros de MSA, MTS, métodos, hinário e escalas.
+5. **Controle e auditoria:** histórico, notificações, exclusões, compartilhamentos e solicitações de alterações.
+6. **Relatórios:** estrutura dos relatórios mensais.
+
+O diagrama apresenta chaves primárias (PK), chaves estrangeiras (FK), cardinalidades e restrições de unicidade, permitindo compreender os relacionamentos entre as entidades.
+
+**[Consultar o DER V-05 completo](docs/DER-MOD-Gestao-Musical-V05.pdf)**
+
+---
+
 # 8. Tecnologias utilizadas
 
 | Tecnologia | Utilização |
